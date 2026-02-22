@@ -531,6 +531,15 @@ function MoneyRequestView({
         // We need to extract the rate from the merchant string
         // See https://github.com/Expensify/App/pull/71675#issuecomment-3425488228 for more information
         rateToDisplay = getRateFromMerchant(updatedMerchantTitle);
+    } else if (isDistanceRequest && !isCustomUnitOutOfPolicy) {
+        // Prefer the rate from the stored merchant string over the current policy rate.
+        // The merchant string was set when the expense was created/edited, so it preserves the original rate
+        // even if the policy rate has since changed. See https://github.com/Expensify/App/issues/82123
+        const storedMerchant = (updatedTransaction ?? transaction)?.modifiedMerchant ?? (updatedTransaction ?? transaction)?.merchant;
+        const rateFromMerchant = getRateFromMerchant(storedMerchant);
+        if (rateFromMerchant) {
+            rateToDisplay = rateFromMerchant;
+        }
     }
 
     const hasErrors = hasMissingSmartscanFields(transaction, transactionReport);
