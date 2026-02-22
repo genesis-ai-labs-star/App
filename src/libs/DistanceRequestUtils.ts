@@ -19,6 +19,7 @@ type MileageRate = {
     name?: string;
     enabled?: boolean;
     index?: number;
+    storedRateForDisplay?: string;
 };
 
 const METERS_TO_KM = 0.001; // 1 kilometer is 1000 meters
@@ -363,6 +364,22 @@ function getDistanceUnit(transaction: OnyxEntry<Transaction>, mileageRate: OnyxE
 }
 
 /**
+ * Extract the rate display string from a stored merchant string.
+ * The merchant format is "<distance> @ <rate>" (e.g., "10.00 mi @ $0.70 / mi").
+ * Returns the rate portion (e.g., "$0.70 / mi") if the merchant contains rate info, otherwise undefined.
+ */
+function getStoredRateForDisplay(transaction: OnyxEntry<Transaction>): string | undefined {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+    const storedMerchant = transaction?.modifiedMerchant || transaction?.merchant;
+    if (!storedMerchant?.includes(CONST.DISTANCE_MERCHANT_SEPARATOR)) {
+        return undefined;
+    }
+    const ratePart = storedMerchant.split(CONST.DISTANCE_MERCHANT_SEPARATOR).at(-1)?.trim();
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+    return ratePart || undefined;
+}
+
+/**
  * Get the selected rate for a transaction, from the policy or P2P default rate.
  * Use the distanceUnit stored on the transaction by default to prevent policy changes modifying existing transactions. Otherwise, get the unit from the rate.
  *
@@ -373,11 +390,15 @@ function getRate({
     policy,
     policyDraft,
     useTransactionDistanceUnit = true,
+    preferStoredRate = false,
 }: {
     transaction: OnyxEntry<Transaction>;
     policy: OnyxEntry<Policy>;
     policyDraft?: OnyxEntry<Policy>;
     useTransactionDistanceUnit?: boolean;
+    /** When true, include the stored rate display string from the transaction's merchant if available.
+     * This preserves the original rate for historical display even if the policy rate has since changed. */
+    preferStoredRate?: boolean;
 }): MileageRate {
     let mileageRates = getMileageRates(policy, true, transaction?.comment?.customUnit?.customUnitRateID);
     if (isEmptyObject(mileageRates) && policyDraft) {
@@ -392,10 +413,12 @@ function getRate({
     const customMileageRate = (customUnitRateID && mileageRates?.[customUnitRateID]) || defaultMileageRate;
     const mileageRate = isCustomUnitRateIDForP2P(transaction) ? getRateForP2P(policyCurrency, transaction) : customMileageRate;
     const unit = getDistanceUnit(useTransactionDistanceUnit ? transaction : undefined, mileageRate);
+    const storedRateForDisplay = preferStoredRate ? getStoredRateForDisplay(transaction) : undefined;
     return {
         ...mileageRate,
         unit,
         currency: mileageRate?.currency ?? policyCurrency,
+        storedRateForDisplay,
     };
 }
 
@@ -436,6 +459,7 @@ export default {
     getRateByCustomUnitRateID,
     getDistanceForDisplayLabel,
     convertDistanceUnit,
+    getStoredRateForDisplay,
 };
 
 export type {MileageRate};
