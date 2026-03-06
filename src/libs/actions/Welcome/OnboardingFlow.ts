@@ -79,10 +79,43 @@ Onyx.connectWithoutView({
 });
 
 /**
+ * Applies Onyx defaults derived from the user's signup qualifier.
+ *
+ * VSB/SMB/INDIVIDUAL qualifiers pre-select certain onboarding answers. These writes
+ * MUST be performed as a separate step — NOT inside getOnboardingInitialPath() — because
+ * getOnboardingInitialPath() is called during navigation guard evaluation.
+ * Writing to Onyx inside a guard triggers the guard's own Onyx subscriptions
+ * (onboardingPurposeSelected, onboardingCompanySize), causing the guard to re-evaluate,
+ * which calls getOnboardingInitialPath() again, which writes to Onyx again — an
+ * infinite feedback loop that crashes the app.
+ */
+function applyOnboardingQualifierDefaults(onboardingValues: OnyxEntry<Onboarding>): void {
+    const isVsb = onboardingValues?.signupQualifier === CONST.ONBOARDING_SIGNUP_QUALIFIERS.VSB;
+    const isSmb = onboardingValues?.signupQualifier === CONST.ONBOARDING_SIGNUP_QUALIFIERS.SMB;
+    const isIndividual = onboardingValues?.signupQualifier === CONST.ONBOARDING_SIGNUP_QUALIFIERS.INDIVIDUAL;
+
+    if (isVsb) {
+        Onyx.set(ONYXKEYS.ONBOARDING_PURPOSE_SELECTED, CONST.ONBOARDING_CHOICES.MANAGE_TEAM);
+        Onyx.set(ONYXKEYS.ONBOARDING_COMPANY_SIZE, CONST.ONBOARDING_COMPANY_SIZE.MICRO);
+    }
+    if (isSmb) {
+        Onyx.set(ONYXKEYS.ONBOARDING_PURPOSE_SELECTED, CONST.ONBOARDING_CHOICES.MANAGE_TEAM);
+    }
+    if (isIndividual) {
+        Onyx.set(ONYXKEYS.ONBOARDING_CUSTOM_CHOICES, [CONST.ONBOARDING_CHOICES.PERSONAL_SPEND, CONST.ONBOARDING_CHOICES.EMPLOYER, CONST.ONBOARDING_CHOICES.CHAT_SPLIT]);
+    }
+}
+
+/**
  * Start a new onboarding flow or continue from the last visited onboarding page.
  */
 function startOnboardingFlow(startOnboardingFlowParams: GetOnboardingInitialPathParamsType) {
     const currentRoute = navigationRef.getCurrentRoute();
+
+    // Apply qualifier-based Onyx defaults here (not inside getOnboardingInitialPath)
+    // to keep the path calculation as a pure, side-effect-free function.
+    applyOnboardingQualifierDefaults(startOnboardingFlowParams.onboardingValuesParam ?? startOnboardingFlowParams.onboardingValues);
+
     const adaptedState = getAdaptedStateFromPath(getOnboardingInitialPath(startOnboardingFlowParams) as Route, linkingConfig.config, false);
     const focusedRoute = findFocusedRoute(adaptedState as PartialState<NavigationState<RootNavigatorParamList>>);
     if (focusedRoute?.name === currentRoute?.name) {
@@ -119,17 +152,6 @@ function getOnboardingInitialPath(getOnboardingInitialPathParams: GetOnboardingI
         return `/${ROUTES.TEST_DRIVE_MODAL_ROOT.route}`;
     }
 
-    if (isVsb) {
-        Onyx.set(ONYXKEYS.ONBOARDING_PURPOSE_SELECTED, CONST.ONBOARDING_CHOICES.MANAGE_TEAM);
-        Onyx.set(ONYXKEYS.ONBOARDING_COMPANY_SIZE, CONST.ONBOARDING_COMPANY_SIZE.MICRO);
-    }
-    if (isSmb) {
-        Onyx.set(ONYXKEYS.ONBOARDING_PURPOSE_SELECTED, CONST.ONBOARDING_CHOICES.MANAGE_TEAM);
-    }
-
-    if (isIndividual) {
-        Onyx.set(ONYXKEYS.ONBOARDING_CUSTOM_CHOICES, [CONST.ONBOARDING_CHOICES.PERSONAL_SPEND, CONST.ONBOARDING_CHOICES.EMPLOYER, CONST.ONBOARDING_CHOICES.CHAT_SPLIT]);
-    }
     if (isUserFromPublicDomain && !onboardingValuesParam?.isMergeAccountStepCompleted) {
         return `/${ROUTES.ONBOARDING_WORK_EMAIL.route}`;
     }
@@ -397,4 +419,4 @@ const getOnboardingMessages = (locale?: Locale) => {
 };
 
 export type {OnboardingMessage, OnboardingTask, OnboardingTaskLinks, OnboardingPurpose, OnboardingCompanySize, GetOnboardingInitialPathParamsType};
-export {getOnboardingInitialPath, startOnboardingFlow, getOnboardingMessages};
+export {getOnboardingInitialPath, startOnboardingFlow, applyOnboardingQualifierDefaults, getOnboardingMessages};

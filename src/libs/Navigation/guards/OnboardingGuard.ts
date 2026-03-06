@@ -1,5 +1,5 @@
-import type {NavigationAction, NavigationState} from '@react-navigation/native';
-import {findFocusedRoute} from '@react-navigation/native';
+import type {NavigationAction, NavigationState, PartialState} from '@react-navigation/native';
+import {findFocusedRoute, getStateFromPath} from '@react-navigation/native';
 import {isSingleNewDotEntrySelector} from '@selectors/HybridApp';
 import {hasCompletedGuidedSetupFlowSelector, tryNewDotOnyxSelector, wasInvitedToNewDotSelector} from '@selectors/Onboarding';
 import Onyx from 'react-native-onyx';
@@ -7,6 +7,7 @@ import type {OnyxEntry} from 'react-native-onyx';
 import type {ValueOf} from 'type-fest';
 import {setOnboardingErrorMessage} from '@libs/actions/Welcome';
 import Log from '@libs/Log';
+import {linkingConfig} from '@libs/Navigation/linkingConfig';
 import {isOnboardingFlowName} from '@libs/Navigation/helpers/isNavigatorName';
 import {getOnboardingInitialPath} from '@userActions/Welcome/OnboardingFlow';
 import CONFIG from '@src/CONFIG';
@@ -179,6 +180,17 @@ const OnboardingGuard: NavigationGuard = {
 
         // User needs onboarding - calculate the correct step and redirect
         const onboardingRoute = getOnboardingRoute();
+
+        // Cycle detection: if the user is already on the target onboarding route, do NOT issue
+        // a REDIRECT. Doing so would trigger a RESET action that re-invokes this guard, which
+        // would REDIRECT again — creating an infinite loop that crashes the app via stack overflow.
+        const currentFocusedRoute = findFocusedRoute(state);
+        const targetNavState = getStateFromPath(onboardingRoute, linkingConfig.config);
+        const targetFocusedRoute = targetNavState ? findFocusedRoute(targetNavState as PartialState<NavigationState>) : null;
+        if (currentFocusedRoute?.name && targetFocusedRoute?.name && currentFocusedRoute.name === targetFocusedRoute.name) {
+            Log.info('[OnboardingGuard] Cycle detected: already on target onboarding route, allowing navigation', false, {route: currentFocusedRoute.name});
+            return {type: 'ALLOW'};
+        }
 
         Log.info('[OnboardingGuard] Redirecting to onboarding route', false, {onboardingRoute});
 
