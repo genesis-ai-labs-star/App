@@ -212,6 +212,8 @@ function useSearchSelectorBase({
                     currentUserAccountID,
                     currentUserEmail,
                     personalDetails,
+                    reportAttributesDerived: reportAttributesDerived?.reports,
+                    allPolicyTags,
                 });
             case CONST.SEARCH_SELECTOR.SEARCH_CONTEXT_MEMBER_INVITE:
                 return getValidOptions(
