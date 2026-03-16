@@ -139,8 +139,17 @@ function useChartLabelLayout({data, font, tickSpacing, labelAreaWidth, allowTigh
         let skipInterval = 1;
         if (rotation === LABEL_ROTATIONS.VERTICAL) {
             const verticalWidth = effectiveWidth(finalMaxWidth, lineHeight, rotation);
-            const visibleCount = maxVisibleCount(labelAreaWidth, verticalWidth);
-            skipInterval = visibleCount >= data.length ? 1 : Math.ceil(data.length / Math.max(1, visibleCount));
+            // At 90°, each label is a narrow text column (lineHeight wide) positioned at its tick.
+            // Labels fit without visual overlap when each column fits within its tick slot.
+            // Compare against tickSpacing directly instead of maxVisibleCount (which adds
+            // LABEL_PADDING) because vertical columns are visually independent — the extra
+            // padding was causing excessive skipping on Android with 16+ categories (#84537).
+            if (verticalWidth <= tickSpacing) {
+                skipInterval = 1;
+            } else {
+                const visibleCount = maxVisibleCount(labelAreaWidth, verticalWidth);
+                skipInterval = visibleCount >= data.length ? 1 : Math.ceil(data.length / Math.max(1, visibleCount));
+            }
         }
 
         // 4. Compute vertical space needed for x-axis labels
